@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Set Python path to include the src directory
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src
 
 # Expose ports
 EXPOSE 8000
@@ -22,6 +22,3 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 ENV QUESTDB_HOST=questdb
 ENV QUESTDB_PORT=8812
-
-# Command to run the application
-CMD ["python", "src/api_server.py"]

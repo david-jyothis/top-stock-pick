@@ -1,15 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Dict
 import uvicorn
 import logging
 import os
-import sys
 
-# Add the src directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import analyzer
 from src.stock_analyzer import StockAnalyzer
 from src.stock_data_collector import StockDataCollector
 
@@ -29,7 +28,7 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 # Initialize components with environment variables
 questdb_host = os.getenv('QUESTDB_HOST', 'questdb')
@@ -48,7 +47,7 @@ class StockAnalysis(BaseModel):
 @app.get("/")
 async def root():
     """Redirect to dashboard"""
-    return {"message": "Welcome to Stock Analysis API. Visit /static/index.html for dashboard"}
+    return RedirectResponse(url="/static/index.html")
 
 @app.get("/api/top-stocks", response_model=List[StockAnalysis])
 async def get_top_stocks():
@@ -88,6 +87,3 @@ async def update_data():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "questdb": f"{questdb_host}:{questdb_port}"}
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

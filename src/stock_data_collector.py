@@ -3,10 +3,10 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict
+import logging
+import time
 import questdb.ingress as qi
 import psycopg2
-from bs4 import BeautifulSoup
-import logging
 
 class StockDataCollector:
     def __init__(self, db_host: str = 'questdb', db_port: int = 8812):
@@ -23,87 +23,157 @@ class StockDataCollector:
         self.conn.autocommit = True
         
     def get_nse_symbols(self) -> List[str]:
-        """Fetch all NSE listed symbols"""
-        try:
-            # NSE provides this data through their website
-            nse_url = "https://www1.nseindia.com/content/equities/EQUITY_L.csv"
-            df = pd.read_csv(nse_url)
-            return df['SYMBOL'].tolist()
-        except Exception as e:
-            self.logger.error(f"Error fetching NSE symbols: {e}")
-            return []
+        """Return a list of test symbols for now"""
+        return ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS', 'WIPRO.NS']
 
-    def fetch_historical_data(self, symbol: str, period: str = "5y") -> pd.DataFrame:
+    def fetch_historical_data(self, symbol: str, period: str = "1mo") -> pd.DataFrame:
         """Fetch historical data for a given symbol"""
         try:
-            stock = yf.Ticker(f"{symbol}.NS")
+            # Remove .NS extension for storing in database
+            clean_symbol = symbol.replace('.NS', '')
+            stock = yf.Ticker(symbol)
             hist = stock.history(period=period)
-            hist['Symbol'] = symbol
+            hist['Symbol'] = clean_symbol
+            self.logger.info(f"Fetched {len(hist)} records for {symbol}")
             return hist
         except Exception as e:
             self.logger.error(f"Error fetching historical data for {symbol}: {e}")
             return pd.DataFrame()
 
-    def fetch_news(self, symbol: str, days: int = 30) -> List[Dict]:
-        """Fetch recent news articles related to the stock"""
+    def store_data_postgres(self, df: pd.DataFrame, table_name: str):
+        """Store data using PostgreSQL connection"""
         try:
-            news_sources = [
-                f"https://newsapi.org/v2/everything?q={symbol}",
-                f"https://economictimes.indiatimes.com/markets/stocks/news"
-            ]
-            news_items = []
+            cursor = self.conn.cursor()
             
-            for source in news_sources:
-                response = requests.get(source)
-                if response.status_code == 200:
-                    articles = response.json().get('articles', [])
-                    news_items.extend(articles)
+            for index, row in df.iterrows():
+                # Convert timestamp to string
+                timestamp = index.strftime('%Y-%m-%d %H:%M:%S')
+                
+                insert_query = f"""
+                INSERT INTO {table_name} 
+                (timestamp, symbol, open, high, low, close, volume)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+                
+                cursor.execute(insert_query, (
+                    timestamp,
+                    row['Symbol'],
+                    float(row['Open']),
+                    float(row['High']),
+                    float(row['Low']),
+                    float(row['Close']),
+                    int(row['Volume'])
+                ))
             
-            return news_items
+            self.conn.commit()
+            cursor.close()
+            self.logger.info(f"Stored {len(df)} records in {table_name}")
+            
         except Exception as e:
-            self.logger.error(f"Error fetching news for {symbol}: {e}")
-            return []
+            self.logger.error(f"Error storing data in database: {e}")
 
-    def store_data(self, data: pd.DataFrame, table_name: str):
-        """Store data in QuestDB using line protocol"""
+    def generate_sample_news(self, symbol: str) -> List[Dict]:
+        """Generate sample news data"""
+        news_templates = [
+            {"title": f"{symbol} reports strong quarterly results", "sentiment": 0.8},
+            {"title": f"{symbol} announces expansion plans", "sentiment": 0.6},
+            {"title": f"{symbol} faces market challenges", "sentiment": -0.4},
+            {"title": f"New opportunities for {symbol}", "sentiment": 0.5}
+        ]
+        return news_templates
+
+    def store_news_data(self, symbol: str, news_items: List[Dict]):
+        """Store news data in database"""
         try:
-            with qi.Sender(self.db_host, 9009) as sender:
-                for index, row in data.iterrows():
-                    # Convert timestamp to microseconds
-                    timestamp = int(index.timestamp() * 1_000_000)
-                    
-                    # Send data using line protocol
-                    sender.row(
-                        table_name,
-                        symbols={'symbol': row['Symbol']},
-                        columns={
-                            'open': float(row['Open']),
-                            'high': float(row['High']),
-                            'low': float(row['Low']),
-                            'close': float(row['Close']),
-                            'volume': int(row['Volume'])
-                        },
-                        at=timestamp
-                    )
+            cursor = self.conn.cursor()
+            
+            for item in news_items:
+                insert_query = """
+                INSERT INTO stock_news 
+                (timestamp, symbol, title, description, sentiment)
+                VALUES (%s, %s, %s, %s, %s)
+                """
+                
+                cursor.execute(insert_query, (
+                    datetime.now(),
+                    symbol,
+                    item['title'],
+                    item.get('description', ''),
+                    item.get('sentiment', 0)
+                ))
+            
+            self.conn.commit()
+            cursor.close()
+            self.logger.info(f"Stored {len(news_items)} news items for {symbol}")
+            
         except Exception as e:
-            self.logger.error(f"Error storing data in QuestDB: {e}")
+            self.logger.error(f"Error storing news data: {e}")
 
     def collect_all_data(self):
         """Main method to collect all required data"""
-        symbols = self.get_nse_symbols()
-        
-        for symbol in symbols:
-            # Fetch and store historical data
-            hist_data = self.fetch_historical_data(symbol)
-            if not hist_data.empty:
-                self.store_data(hist_data, 'stock_historical_data')
+        try:
+            # Create tables if they don't exist
+            cursor = self.conn.cursor()
             
-            # Fetch and store news
-            news_data = self.fetch_news(symbol)
-            if news_data:
-                news_df = pd.DataFrame(news_data)
-                self.store_data(news_df, 'stock_news')
+            # Create stock_historical_data table
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stock_historical_data (
+                timestamp TIMESTAMP,
+                symbol STRING,
+                open DOUBLE,
+                high DOUBLE,
+                low DOUBLE,
+                close DOUBLE,
+                volume LONG
+            );
+            """)
+            
+            # Create stock_news table
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stock_news (
+                timestamp TIMESTAMP,
+                symbol STRING,
+                title STRING,
+                description STRING,
+                sentiment DOUBLE
+            );
+            """)
+            
+            self.conn.commit()
+            cursor.close()
+            
+            symbols = self.get_nse_symbols()
+            self.logger.info(f"Starting data collection for {len(symbols)} symbols")
+            
+            for symbol in symbols:
+                self.logger.info(f"Processing {symbol}")
+                
+                # Fetch and store historical data
+                hist_data = self.fetch_historical_data(symbol)
+                if not hist_data.empty:
+                    self.store_data_postgres(hist_data, 'stock_historical_data')
+                
+                # Generate and store sample news
+                news_data = self.generate_sample_news(symbol.replace('.NS', ''))
+                if news_data:
+                    self.store_news_data(symbol.replace('.NS', ''), news_data)
+                
+                time.sleep(1)  # Avoid rate limiting
+                
+            self.logger.info("Data collection completed successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error in data collection: {e}")
+        finally:
+            if self.conn:
+                self.conn.close()
 
 if __name__ == "__main__":
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
     collector = StockDataCollector()
     collector.collect_all_data()

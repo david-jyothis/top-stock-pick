@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -13,7 +11,9 @@ services:
       - QUESTDB_PORT=8812
     volumes:
       - .:/app
-    restart: unless-stopped
+    networks:
+      - stock_network
+    command: python -m uvicorn src.api_server:app --host 0.0.0.0 --port 8000 --reload
 
   questdb:
     image: questdb/questdb:latest
@@ -28,7 +28,20 @@ services:
       - QDB_PG_USER=admin
       - QDB_PG_PASSWORD=quest
       - QDB_HTTP_MIN_ENABLED=true
-    restart: unless-stopped
+      - QDB_CAIRO_MMF_SIZE_LIMIT=2048
+      - QDB_SHARED_WORKER_COUNT=2
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    networks:
+      - stock_network
+
+networks:
+  stock_network:
+    driver: bridge
 
 volumes:
   questdb_data:

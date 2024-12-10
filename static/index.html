@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSE Stock Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto py-6 px-4">
+                <h1 class="text-3xl font-bold text-gray-900">NSE Stock Analysis Dashboard</h1>
+                <p class="mt-1 text-sm text-gray-500">Real-time analysis and predictions for NSE stocks</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto py-6 px-4">
+            <!-- Statistics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5">
+                        <dt class="text-sm font-medium text-gray-500">Analyzed Stocks</dt>
+                        <dd class="mt-1 text-3xl font-semibold text-indigo-600" id="analyzedStocks">-</dd>
+                    </div>
+                </div>
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5">
+                        <dt class="text-sm font-medium text-gray-500">Average Return</dt>
+                        <dd class="mt-1 text-3xl font-semibold text-green-600" id="averageReturn">-</dd>
+                    </div>
+                </div>
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5">
+                        <dt class="text-sm font-medium text-gray-500">Market Sentiment</dt>
+                        <dd class="mt-1 text-3xl font-semibold text-blue-600" id="marketSentiment">-</dd>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold mb-4">Top Performers</h2>
+                    <canvas id="performanceChart"></canvas>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold mb-4">Sentiment Analysis</h2>
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Stock Table -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-4 py-5 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold">Top Stock Picks</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Predicted Return</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Technical Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sentiment Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall Score</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="stockTableBody">
+                            <!-- Data will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Fetch and display data
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/top-stocks');
+                const data = await response.json();
+                
+                // Update statistics
+                document.getElementById('analyzedStocks').textContent = data.length;
+                const avgReturn = data.reduce((acc, stock) => acc + stock.predicted_return, 0) / data.length;
+                document.getElementById('averageReturn').textContent = `${(avgReturn * 100).toFixed(2)}%`;
+                const avgSentiment = data.reduce((acc, stock) => acc + stock.sentiment_score, 0) / data.length;
+                document.getElementById('marketSentiment').textContent = `${(avgSentiment * 100).toFixed(2)}%`;
+
+                // Update table
+                const tableBody = document.getElementById('stockTableBody');
+                tableBody.innerHTML = data.map(stock => `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${stock.symbol}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(stock.predicted_return * 100).toFixed(2)}%</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(stock.technical_score * 100).toFixed(2)}%</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(stock.sentiment_score * 100).toFixed(2)}%</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${(stock.overall_score * 100).toFixed(2)}%</td>
+                    </tr>
+                `).join('');
+
+                // Update charts
+                updatePerformanceChart(data);
+                updateSentimentChart(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        function updatePerformanceChart(data) {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.slice(0, 5).map(stock => stock.symbol),
+                    datasets: [{
+                        label: 'Predicted Return (%)',
+                        data: data.slice(0, 5).map(stock => stock.predicted_return * 100),
+                        backgroundColor: 'rgba(79, 70, 229, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateSentimentChart(data) {
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        data: [
+                            data.filter(s => s.sentiment_score > 0.3).length,
+                            data.filter(s => s.sentiment_score >= -0.3 && s.sentiment_score <= 0.3).length,
+                            data.filter(s => s.sentiment_score < -0.3).length
+                        ],
+                        backgroundColor: [
+                            'rgba(34, 197, 94, 0.6)',
+                            'rgba(234, 179, 8, 0.6)',
+                            'rgba(239, 68, 68, 0.6)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initial load
+        fetchData();
+        // Refresh every 5 minutes
+        setInterval(fetchData, 300000);
+    </script>
+</body>
+</html>
