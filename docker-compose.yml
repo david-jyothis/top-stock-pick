@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: stock_analysis_app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - questdb
+    environment:
+      - QUESTDB_HOST=questdb
+      - QUESTDB_PORT=8812
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  questdb:
+    image: questdb/questdb:latest
+    container_name: stock_analysis_db
+    ports:
+      - "8812:8812"  # TCP for database connections
+      - "9000:9000"  # HTTP for REST API and Web Console
+      - "9009:9009"  # TCP for line protocol
+    volumes:
+      - questdb_data:/root/.questdb
+    environment:
+      - QDB_PG_USER=admin
+      - QDB_PG_PASSWORD=quest
+      - QDB_HTTP_MIN_ENABLED=true
+    restart: unless-stopped
+
+volumes:
+  questdb_data:
+    name: stock_analysis_questdb_data
