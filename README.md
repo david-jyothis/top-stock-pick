@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NSE Stock Analysis System
 
 A comprehensive system for analyzing NSE stocks using machine learning and technical analysis.
@@ -50,15 +51,52 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 2. Install dependencies:
+=======
+# NSE Stock Analysis and Profiling System
+
+An advanced stock analysis system for NSE stocks using machine learning and technical analysis.
+
+## Features
+
+- Real-time stock data collection
+- Technical analysis
+- Machine learning-based predictions
+- News sentiment analysis
+- Web dashboard
+- Automated testing
+
+## Setup
+
+1. Install dependencies:
+>>>>>>> 25c7cbae76f73da59217fc164e1748bb72fbfa9b
 ```bash
 pip install -r requirements.txt
 ```
 
+<<<<<<< HEAD
 3. Run tests:
+=======
+2. Configure database:
+```bash
+python scripts/init_db.py
+```
+
+3. Run the application:
+```bash
+python src/api_server.py
+```
+
+4. Access dashboard at http://localhost:8000
+
+## Testing
+
+Run tests:
+>>>>>>> 25c7cbae76f73da59217fc164e1748bb72fbfa9b
 ```bash
 python -m pytest tests/
 ```
 
+<<<<<<< HEAD
 ## Architecture
 
 - FastAPI for REST API
@@ -77,3 +115,8 @@ python -m pytest tests/
 ## License
 
 MIT License
+=======
+## License
+
+MIT
+>>>>>>> 25c7cbae76f73da59217fc164e1748bb72fbfa9b
